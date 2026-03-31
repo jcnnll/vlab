@@ -7,8 +7,6 @@ VERSION="v0.0.1"
 # Exit on error, pipefail ensures errors in curl | tar are caught
 set -eo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Helper for consistent logging
 log() { echo -e "\033[1;34m[vlab]\033[0m $1"; }
 error() {
@@ -28,55 +26,51 @@ detect_os() {
 
 check_dependencies() {
   log "Checking host environment..."
-
   if [[ "$1" == "macos" ]]; then
     command -v brew >/dev/null 2>&1 || error "Homebrew is required for macOS installation."
   fi
 }
 
 install_pacman() {
-  log "Installing VM tools via pacman..."
-
-  # qemu provides the hardware emulation for Lima on Linux
-  sudo pacman -S --needed --noconfirm lima qemu-desktop || error "Failed to install pacman packages."
-
-  # Ensure the user is in the libvirt/kvm groups if necessary
-  # (Lima usually handles its own unprivileged execution on Linux)
+  log "Ensuring VM tools via pacman..."
+  sudo pacman -S --needed --noconfirm lima qemu-desktop
 }
 
 install_brew() {
-  log "Installing VM tools via Homebrew..."
-  # Lima is the core engine
-  brew install lima || error "Failed to install lima."
+  log "Ensuring VM tools via Homebrew..."
+  # 'brew install' is natively idempotent; it skips if already installed
+  brew install lima
+  brew install socket_vmnet
 
-  # socket_vmnet provides the bridge networking for mDNS (.local names)
-  brew install socket_vmnet || error "Failed to install socket_vmnet."
-
-  log "Setting up network bridge permissions (requires sudo)..."
-  # socket_vmnet needs specific setuid bits to create bridges without sudo later
-  sudo brew services start socket_vmnet
+  # Idempotent service check
+  if ! brew services list | grep -q "socket_vmnet.*started"; then
+    log "Starting network bridge permissions (requires sudo)..."
+    sudo brew services start socket_vmnet
+  else
+    log "Network bridge service is already running."
+  fi
 }
 
 install_cli() {
-
   OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
   ARCH_NAME=$(uname -m)
 
-  # Standardize architecture names for Go/GitHub assets
   [[ "$ARCH_NAME" == "x86_64" ]] && ARCH_NAME="amd64"
   [[ "$ARCH_NAME" == "arm64" || "$ARCH_NAME" == "aarch64" ]] && ARCH_NAME="arm64"
 
-  # The exact filename your GitHub Action must produce
   BINARY_NAME="vlab_${VERSION}_${OS_NAME}_${ARCH_NAME}.tar.gz"
-
-  # THE FINAL CORRECTED URL
   DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}"
+
+  # Idempotency check: Don't download/reinstall if version matches
+  if command -v vlab >/dev/null 2>&1; then
+    # We'll implement 'vlab version' in the CLI later, for now we can skip or force
+    log "vlab binary already exists. Re-installing to ensure $VERSION..."
+  fi
 
   log "Downloading VLab CLI from: $DOWNLOAD_URL"
 
-  # -fsSL: Fail on 404, Silent but show errors, follow Redirects
   if ! curl -fsSL "$DOWNLOAD_URL" -o "/tmp/$BINARY_NAME"; then
-    error "Failed to download from https://github.com{REPO}/releases"
+    error "Failed to download $BINARY_NAME from GitHub."
   fi
 
   log "Installing vlab binary to /usr/local/bin..."
@@ -103,6 +97,6 @@ arch) install_pacman ;;
 esac
 
 log "Installing VLab CLI..."
-#install_cli
+install_cli
 
 echo -e "\u2713 VLab installation complete! Run 'vlab status' to begin."
