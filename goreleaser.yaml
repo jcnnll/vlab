@@ -1,0 +1,17 @@
+version: 2
+project_name: vlab
+
+builds:
+  - id: vlab
+    main: ./cmd/vlab
+    binary: vlab
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    builds: [vlab] # Explicitly link to the build ID
+    format: tar.gz
+    name_template: "vlab_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+
