@@ -1,102 +1,120 @@
 #!/usr/bin/env bash
 
-# --- The Package Variables ---
+set -euo pipefail
+
+# --- Configuration ---
 REPO="jcnnll/vlab"
-VERSION="v0.0.1"
+VMNET_REPO="lima-vm/socket_vmnet"
+INSTALL_DIR="/opt/homebrew/bin"
+VMNET_ROOT="/opt/socket_vmnet"
+TMP_DIR=$(mktemp -d "/tmp/vlab_install")
 
-# Exit on error, pipefail ensures errors in curl | tar are caught
-set -eo pipefail
+# Ensure cleanup on exit
+trap 'rm -rf "$TMP_DIR"' EXIT
+umask 022
 
-# Helper for consistent logging
+# --- Logging ---
 log() { echo -e "\033[1;34m[vlab]\033[0m $1"; }
 error() {
   echo -e "\033[1;31m[error]\033[0m $1" >&2
   exit 1
 }
 
-detect_os() {
-  case "$(uname -s)" in
-  Darwin) echo "macos" ;;
-  Linux)
-    if [ -f /etc/arch-release ]; then echo "arch"; else echo "unsupported"; fi
-    ;;
-  *) echo "unsupported" ;;
-  esac
+# --- Platform Check ---
+detect_platform() {
+  [[ "$(uname -s)" != "Darwin" ]] && error "Only macOS is supported."
+  [[ "$(uname -m)" != "arm64" ]] && error "Apple Silicon required."
+  OS_NAME="darwin"
+  ARCH_NAME="arm64"
 }
 
-check_dependencies() {
+# --- Version Fetcher (Your Pattern) ---
+get_latest_tag() {
+  local target_repo=$1
+  # Points to the official REST API endpoint
+  local tag=$(curl -fsSL "https://api.github.com/repos/${target_repo}/releases/latest" |
+    grep '"tag_name":' |
+    sed -E 's/.*"([^"]+)".*/\1/')
+
+  [[ -z "$tag" ]] && error "Failed to fetch latest version for ${target_repo}."
+  echo "$tag"
+}
+
+# --- Logic ---
+install_dependencies() {
   log "Checking host environment..."
-  if [[ "$1" == "macos" ]]; then
-    command -v brew >/dev/null 2>&1 || error "Homebrew is required for macOS installation."
+
+  # 1. Xcode Command Line Tools
+  if ! xcode-select -p >/dev/null 2>&1; then
+    log "Installing Xcode Command Line Tools..."
+    # This opens the macOS GUI installer
+    xcode-select --install
+    log "Please complete the GUI installation and then re-run this script."
+    exit 0
   fi
-}
 
-install_pacman() {
-  log "Ensuring VM tools via pacman..."
-  sudo pacman -S --needed --noconfirm lima qemu-desktop
-}
+  # 2. Rosetta 2
+  if ! pkgutil --pkg-info=com.apple.pkg.RosettaUpdateAuto >/dev/null 2>&1; then
+    log "Installing Rosetta 2..."
+    softwareupdate --install-rosetta --agree-to-license || log "Warning: Rosetta install skipped."
+  fi
 
-install_brew() {
-  log "Ensuring VM tools via Homebrew..."
-  # 'brew install' is natively idempotent; it skips if already installed
-  brew install lima
-  brew install socket_vmnet
+  # 3. Lima via Brew
+  if ! command -v brew >/dev/null 2>&1; then
+    log "ERROR: Homebrew is not installed. Please install Homebrew first."
+    exit 1
+  fi
+  if ! command -v limactl >/dev/null 2>&1; then
+    log "Installing Lima via Homebrew..."
+    brew install lima
+  fi
 
-  # Idempotent service check
-  if ! brew services list | grep -q "socket_vmnet.*started"; then
-    log "Starting network bridge permissions (requires sudo)..."
-    sudo brew services start socket_vmnet
+  # 4. Secure socket_vmnet
+  local TAG=$(get_latest_tag "$VMNET_REPO")
+  local VER="${TAG#v}"
+  local BIN="$VMNET_ROOT/bin/socket_vmnet"
+
+  if [[ -f "$BIN" ]] && [[ "$("$BIN" --version | awk '{print $NF}')" == "$VER" ]]; then
+    log "socket_vmnet $VER already current."
   else
-    log "Network bridge service is already running."
+    log "Installing socket_vmnet $VER to $VMNET_ROOT..."
+    local FILE="socket_vmnet-${VER}-${ARCH_NAME}.tar.gz"
+    local URL="https://github.com/${VMNET_REPO}/releases/download/${TAG}/${FILE}"
+
+    curl -fsSL -o "$TMP_DIR/$FILE" "$URL"
+    brew uninstall socket_vmnet --force 2>/dev/null || true
+
+    sudo rm -rf "$VMNET_ROOT"
+    sudo tar -C / -xzf "$TMP_DIR/$FILE" opt/socket_vmnet
+    sudo chown -R root:wheel "$VMNET_ROOT"
+
   fi
+  # ALWAYS run this to ensure the Root Access bridge exists
+  log "Force-syncing sudoers for /opt/socket_vmnet..."
+  LIMA_SUDOERS_NET="$BIN" limactl sudoers >"$TMP_DIR/lima-sudoers"
+  sudo install -o root -g wheel -m 440 "$TMP_DIR/lima-sudoers" /etc/sudoers.d/lima
 }
 
-install_cli() {
-  OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
-  ARCH_NAME=$(uname -m)
+install_vlab() {
+  local VERSION=$(get_latest_tag "$REPO")
+  log "Installing VLab $VERSION..."
 
-  [[ "$ARCH_NAME" == "x86_64" ]] && ARCH_NAME="amd64"
-  [[ "$ARCH_NAME" == "arm64" || "$ARCH_NAME" == "aarch64" ]] && ARCH_NAME="arm64"
+  local BINARY_NAME="vlab_${VERSION}_${OS_NAME}_${ARCH_NAME}.tar.gz"
+  local CHECKSUM_NAME="vlab_${VERSION#v}_checksums.txt"
 
-  BINARY_NAME="vlab_${VERSION}_${OS_NAME}_${ARCH_NAME}.tar.gz"
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}"
+  curl -fsSL -o "$TMP_DIR/$BINARY_NAME" "https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}"
+  curl -fsSL -o "$TMP_DIR/$CHECKSUM_NAME" "https://github.com/${REPO}/releases/download/${VERSION}/${CHECKSUM_NAME}"
 
-  # Idempotency check: Don't download/reinstall if version matches
-  if command -v vlab >/dev/null 2>&1; then
-    # We'll implement 'vlab version' in the CLI later, for now we can skip or force
-    log "vlab binary already exists. Re-installing to ensure $VERSION..."
-  fi
+  (cd "$TMP_DIR" && grep "$BINARY_NAME" "$CHECKSUM_NAME" | shasum -a 256 -c -) || error "Checksum failed."
 
-  log "Downloading VLab CLI from: $DOWNLOAD_URL"
-
-  if ! curl -fsSL "$DOWNLOAD_URL" -o "/tmp/$BINARY_NAME"; then
-    error "Failed to download $BINARY_NAME from GitHub."
-  fi
-
-  log "Installing vlab binary to /usr/local/bin..."
-  sudo tar -xzf "/tmp/$BINARY_NAME" -C /usr/local/bin vlab
-  sudo chmod +x /usr/local/bin/vlab
-
-  rm "/tmp/$BINARY_NAME"
+  log "Deploying vlab to $INSTALL_DIR..."
+  sudo tar -xzf "$TMP_DIR/$BINARY_NAME" -C "$INSTALL_DIR" vlab
+  sudo chmod +x "$INSTALL_DIR/vlab"
 }
 
-# --- Main Execution ---
+# --- Main ---
+detect_platform
+install_dependencies
+install_vlab
 
-log "Starting VLab installation..."
-OS=$(detect_os)
-
-if [[ "$OS" == "unsupported" ]]; then
-  error "This OS is not supported. VLab currently supports macOS and Arch Linux."
-fi
-
-check_dependencies "$OS"
-
-case "$OS" in
-macos) install_brew ;;
-arch) install_pacman ;;
-esac
-
-log "Installing VLab CLI..."
-install_cli
-
-echo -e "\u2713 VLab installation complete! Run 'vlab status' to begin."
+echo -e "✔ Installation complete! Run 'vlab status' to begin."
