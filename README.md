@@ -2,6 +2,11 @@
 
 Provides an unopionated platform to build virtual infrastructure labs on macOS ARM64 machines.
 
+<p align="center">
+  <img src="docs/demo/demo.gif" alt="VLab Orchestration Demo" width="800">
+  <br>
+</p>
+
 ## What Problem Is Being Solved
 
 The core problem being solved is the unnecessary complexity involved in building a native, high-performance virtual lab on Apple Silicon. Identifying the appropriate toolchain that will support a fully functional `virtual infrastructure lab` presents one of the main challenges and involves a significant amount of 'doc diving'.
