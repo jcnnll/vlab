@@ -14,10 +14,14 @@ A real lab requires native networking capability that enables transparent bi-dir
 The installer requires [Homebrew](https://brew.sh/) to install Lima.
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
 ## Installer
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jcnnll/vlab/refs/heads/main/install.sh)"
+```
 
 **Note:** This is what the script will execute on your machine.
 
@@ -58,15 +62,13 @@ To avoid resource exhaustion on the host, `vlab up` and `vlab down` processes no
 
 Define your provisioning order in a flat list:
 
-```
-```
+```bash
 nodes:
   - dns
   - node-01
   - node-02
 ```
 
-```
 **Note:** the same naming convention used by Lima is applied to the vlab.yaml file. Only the file name is used to reference a VM instance.
 
 ### CLI Commands
