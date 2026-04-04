@@ -9,6 +9,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type VMProvider interface {
+	StatusVMs() error
+	StartVMs(vms []string) error
+	StopVMs(vms []string) error
+}
+
+type LimaProvider struct{}
+
+func (l LimaProvider) StatusVMs() error {
+	return lima.StatusVMs()
+}
+
+func (l LimaProvider) StartVMs(vms []string) error {
+	return lima.StartVMs(vms)
+}
+
+func (l LimaProvider) StopVMs(vms []string) error {
+	return lima.StopVMs(vms)
+}
+
 // Version is populated at build time via -ldflags
 var Version = "dev"
 
@@ -22,7 +42,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 	}
 
-	if err := run(os.Args); err != nil {
+	provider := LimaProvider{}
+
+	if err := run(os.Args, provider); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -51,7 +73,7 @@ func loadVMs() error {
 	return nil
 }
 
-func run(args []string) error {
+func run(args []string, p VMProvider) error {
 	usage := fmt.Sprintf("vlab %s usage: vlab [status|up|down|version]", Version)
 
 	if len(args) < 2 {
@@ -76,19 +98,19 @@ func run(args []string) error {
 	case "version":
 		fmt.Println(Version)
 	case "status":
-		return lima.StatusVMs()
+		return p.StatusVMs()
 
 	case "up":
 		if len(vms) == 0 {
 			return errors.New("no VMs provided: check vlab.yaml exists")
 		}
-		return lima.StartVMs(vms)
+		return p.StartVMs(vms)
 
 	case "down":
 		if len(vms) == 0 {
 			return errors.New("no VMs provided: check vlab.yaml exists")
 		}
-		return lima.StopVMs(vms)
+		return p.StopVMs(vms)
 
 	}
 

@@ -5,7 +5,23 @@ import (
 	"testing"
 )
 
+type MockVMProvider struct{}
+
+func (m MockVMProvider) StatusVMs() error {
+	return nil
+}
+
+func (m MockVMProvider) StartVMs(vms []string) error {
+	return nil
+}
+
+func (m MockVMProvider) StopVMs(vms []string) error {
+	return nil
+}
+
 func TestCommandRouting(t *testing.T) {
+	mock := MockVMProvider{}
+
 	tests := []struct {
 		name    string
 		args    []string
@@ -21,7 +37,7 @@ func TestCommandRouting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := run(tt.args)
+			err := run(tt.args, mock)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("run() error = %v, wantErr %v", err, tt.wantErr)
 			}
