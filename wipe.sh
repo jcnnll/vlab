@@ -34,7 +34,7 @@ uninstall() {
   # Remove the installation directory and sudoers config
   sudo rm -rf /opt/socket_vmnet
   sudo rm -f /etc/sudoers.d/lima
-  sudo rm -rf /opt/homebrew/bin/vlab
+  sudo rm -rf /usr/local/bin/vlab
 
   # 3. Uninstall Lima via Homebrew
   echo "Uninstalling Lima via Homebrew..."

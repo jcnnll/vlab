@@ -5,7 +5,7 @@ set -euo pipefail
 # --- Configuration ---
 REPO="jcnnll/vlab"
 VMNET_REPO="lima-vm/socket_vmnet"
-INSTALL_DIR="/opt/homebrew/bin"
+INSTALL_DIR="/usr/local/bin"
 VMNET_ROOT="/opt/socket_vmnet"
 TMP_DIR=$(mktemp -d "/tmp/vlab_install")
 
@@ -61,7 +61,7 @@ install_dependencies() {
 
   # 3. Lima via Brew
   if ! command -v brew >/dev/null 2>&1; then
-    log "ERROR: Homebrew is not installed. Please install Homebrew first."
+    log "ERROR: Homebrew is not installed. Please install Homebrew (https://brew.sh/) and run the install again."
     exit 1
   fi
   if ! command -v limactl >/dev/null 2>&1; then

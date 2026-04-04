@@ -9,8 +9,8 @@ builds:
     ldflags:
       - -X main.Version={{.Tag}}
     env: [CGO_ENABLED=0]
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    goos: [darwin]
+    goarch: [arm64]
 
 archives:
   - id: default

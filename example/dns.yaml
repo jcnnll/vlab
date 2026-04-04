@@ -1,0 +1,82 @@
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-arm64.img"
+
+cpus: 1
+memory: 512MiB
+
+networks:
+  - socket: "/tmp/vlab_vmnet"
+
+provision:
+  - mode: system
+    script: |
+      # Set hostname
+      hostnamectl set-hostname dns
+      echo "192.168.2.10 dns" >> /etc/hosts
+
+      # ---- PHASE 1: Bootstrap networking (external DNS) ----
+      cat > /etc/netplan/50-static-dns.yaml <<'EOF'
+      network:
+        version: 2
+        ethernets:
+          eth0:
+            addresses:
+              - 192.168.2.10/24
+            nameservers:
+              addresses: [8.8.8.8]
+      EOF
+      netplan apply
+
+      # Ensure resolv.conf works immediately
+      rm -f /etc/resolv.conf
+      echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+      # Install BIND9
+      apt-get update
+      apt-get install -y bind9 dnsutils
+
+      # ---- Configure BIND ----
+      cat > /etc/bind/named.conf.options <<'EOF'
+      options {
+        directory "/var/cache/bind";
+        listen-on { any; };
+        allow-query { any; };
+        recursion yes;
+      };
+      EOF
+
+      cat > /etc/bind/named.conf.local <<'EOF'
+      zone "vlab" {
+          type master;
+          file "/etc/bind/db.vlab";
+      };
+      EOF
+
+      cat > /etc/bind/db.vlab <<'EOF'
+      $TTL    604800
+      @       IN      SOA     dns.vlab. root.vlab. (
+                                2
+                           604800
+                            86400
+                          2419200
+                           604800 )
+      @       IN      NS      dns.vlab.
+      dns     IN      A       192.168.2.10
+      EOF
+
+      # Start DNS
+      systemctl enable bind9
+      systemctl restart bind9
+
+      # ---- PHASE 2: Switch to self DNS ----
+      cat > /etc/netplan/50-static-dns.yaml <<'EOF'
+      network:
+        version: 2
+        ethernets:
+          eth0:
+            addresses:
+              - 192.168.2.10/24
+            nameservers:
+              addresses: [192.168.2.10]
+      EOF
+      netplan apply
