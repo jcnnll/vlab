@@ -1,6 +1,8 @@
 # VLab
 
-Provides an unopionated platform to build virtual infrastructure labs on macOS ARM64 machines.
+Is a personal experiment I created to learn more about virtualisation on masOS ARM64.
+
+The vlab cli tool provides a utility that enables the serial start up and shutowm of VMs managed by Lima.
 
 <p align="center">
   <img src="docs/demo/demo.gif" alt="VLab Orchestration Demo" width="800">
@@ -9,18 +11,8 @@ Provides an unopionated platform to build virtual infrastructure labs on macOS A
 
 ## What Problem Is Being Solved
 
-The core problem being solved is the unnecessary complexity involved in building a native, high-performance virtual lab on Apple Silicon. Identifying the appropriate toolchain that will support a fully functional `virtual infrastructure lab` presents one of the main challenges and involves a significant amount of 'doc diving'.
-
-A real lab requires native networking capability that enables transparent bi-directional connectivity between the host and guest machines. This is not supported out of the box with Lima and requires selecting the appropriate toolchain for provisioning the required network stack. Without a functional L2 bridge that allows nodes to talk to each other and the host as if they were on a physical switch, the environment is just a collection of isolated VMs rather than a true infrastructure lab.
-
-
-## Required Dependencies
-
-The installer requires [Homebrew](https://brew.sh/) to install Lima.
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
+The core problem being solved is the ability to spin up and tear down a collection of VMs that are managed by Lima. I created this tool
+as a light-weight convenience utility that allows me to bring up and down multiple VMs managed by Lima.
 
 ## Installer
 
@@ -28,7 +20,7 @@ The installer requires [Homebrew](https://brew.sh/) to install Lima.
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jcnnll/vlab/refs/heads/main/install.sh)"
 ```
 
-**Note:** This is what the script will execute on your machine.
+**Note:** This script is used to install the dependencies as well as VLab to the machine. It will only run on macOS ARM64.
 
 ### 1. Environment Validation
 
@@ -84,4 +76,4 @@ nodes:
 
 ## Example Usage
 
-As an example the foundational part of a fully functional virtual lab is included in the `example` lab in this repo. The lab includes a valid `vlab.yaml` file, the `dns.yaml` file that provisions a Lima VM instance as a DNS server and the `config-nameserver.sh` script that sets up macOS native conditional forwarding and establish the bi-directional network bridge between the host and guests.
+As an example I created a single VM that is configured to run the DNS - this is an example of an experiment I ran to learn about DNS.
